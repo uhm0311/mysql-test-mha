@@ -1,0 +1,26 @@
+[server default]
+user=mha_manager
+password=manager_password
+ssh_user=mha
+repl_user=replication
+repl_password=replication_password
+manager_workdir=/home/mha/masterha/app1
+manager_log=/home/mha/masterha/app1/app1.log
+
+remote_workdir=/home/mha/masterha/app1
+master_binlog_dir=/var/lib/mysql
+
+secondary_check_script=/usr/local/bin/masterha_secondary_check -s 10.34.93.238 -s 10.34.92.234 --master_host=10.34.93.238 --master_ip=10.34.93.238 --master_port=3337
+
+master_ip_failover_script=/home/mha/masterha/scripts/master_ip_failover
+master_ip_online_change_script=/home/mha/masterha/scripts/master_ip_online_change
+
+[server1]
+hostname=10.34.93.238
+port=3337
+candidate_master=1
+
+[server2]
+hostname=10.34.92.234
+port=3337
+candidate_master=1

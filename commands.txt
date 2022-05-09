@@ -1,0 +1,107 @@
+# db1, db2
+sudo yum -y install perl-CPAN perl-DBD-MySQL perl-Module-Install
+
+# manager
+sudo yum -y install perl-CPAN perl-DBD-MySQL perl-Log-Dispatch perl-Parallel-ForkManager perl-Module-Install
+
+# db1, db2, manager
+./add-mha-user.sh
+
+sudo su - mha
+ssh-keygen -t rsa -b 4096
+
+./mysql-mha-node.sh
+
+# db1
+ssh-copy-id -i 10.34.92.234
+ssh-copy-id -i 10.34.33.85
+
+ssh 10.34.92.234
+ssh 10.34.33.85
+
+# db2
+ssh-copy-id -i 10.34.93.238
+ssh-copy-id -i 10.34.33.85
+
+ssh 10.34.93.238
+ssh 10.34.33.85
+
+# manager
+ssh-copy-id -i 10.34.93.238
+ssh-copy-id -i 10.34.92.234
+
+ssh 10.34.93.238
+ssh 10.34.92.234
+
+# db1, db2
+./install-mysql.sh
+
+# db1
+./mysql1.sh
+./mysqlterm.sh
+
+uninstall plugin validate_password;
+SET PASSWORD FOR 'root'@'localhost' = PASSWORD('root');
+GRANT ALL PRIVILEGES         ON *.* TO 'mha_manager'@'%' IDENTIFIED BY 'manager_password';
+GRANT REPLICATION SLAVE      ON *.* TO 'replication'@'%' IDENTIFIED BY 'replication_password';
+FLUSH PRIVILEGES;
+SHOW MASTER STATUS;
+
+# db2
+./mysql2.sh
+./mysqlterm.sh
+
+uninstall plugin validate_password;
+SET PASSWORD FOR 'root'@'localhost' = PASSWORD('root');
+GRANT ALL PRIVILEGES         ON *.* TO 'mha_manager'@'%' IDENTIFIED BY 'manager_password';
+GRANT REPLICATION SLAVE      ON *.* TO 'replication'@'%' IDENTIFIED BY 'replication_password';
+FLUSH PRIVILEGES;
+
+CHANGE MASTER TO master_host='10.34.93.238', master_port=3337, master_user='replication', master_password='replication_password', master_log_file='mysql-bin.000003', master_log_pos=898;
+START SLAVE;
+SHOW SLAVE STATUS\G
+
+# manager
+./mysql-mha-manager.sh
+
+masterha_manager --conf=$(pwd)/conf/app1.cnf
+masterha_check_repl --conf=$(pwd)/conf/app1.cnf
+
+# db1
+CREATE DATABASE test;
+USE test;
+CREATE TABLE test1 (id INT PRIMARY KEY);
+INSERT INTO test1 VALUES (1);
+
+# db2
+USE test;
+SELECT * FROM test1;
+
+# db1
+./clean.sh
+
+# manager
+masterha_check_repl --conf=$(pwd)/conf/app1.cnf --last_failover_minute=1
+
+# db1
+./mysql1.sh
+./mysqlterm.sh
+
+CHANGE MASTER TO master_host='10.34.92.234', master_port=3337, master_user='replication', master_password='replication_password', master_log_file='mysql-bin.000001', master_log_pos=1152;
+START SLAVE;
+SHOW SLAVE STATUS\G
+
+# db2
+INSERT INTO test1 VALUES (2);
+
+# db1
+USE test;
+SELECT * FROM test1;
+
+# manager
+masterha_check_repl --conf=$(pwd)/conf/app1.cnf 
+
+# clean in db1, db2
+DROP DATABASE test;
+
+./clean.sh
